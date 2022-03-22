@@ -3,13 +3,14 @@
 #include <stdbool.h>
 #include <time.h>
 #include <memory.h>
+#include <dir.h>
 
 #define TIME_TEST(testCode, time){ \
-    clock_t start_time = clock() ; \
-    testCode \
-        clock_t end_time = clock() ;\
-    clock_t sort_time = end_time - start_time ; \
-time = (double) sort_time / CLOCKS_PER_SEC ; \
+    clock_t start_time = clock(); \
+    testCode; \
+    clock_t end_time = clock();\
+    clock_t sort_time = end_time - start_time; \
+time = (double) sort_time / CLOCKS_PER_SEC; \
 };
 
 #define ARRAY_SIZE(a)  sizeof (a)/sizeof (a[0])
@@ -63,7 +64,18 @@ void swap(int *a, int *b) {
     *b = t;
 }
 
-void checkTime(void (*sortFunc )(int *, size_t),
+void createFile(char* file_name,
+                const SortFunc sort_func,
+                const char* experiment_name,
+                const char* suffix) {
+    char file_dir[256];
+    mkdir("../../data");
+    sprintf(file_dir, "%s/%s/", "../../data", sort_func.name);
+    mkdir(file_dir);
+    sprintf(file_name, "%s/%s_%s.csv", file_dir, experiment_name, suffix);
+}
+
+void checkTime(SortFunc sortFuncn,
                void (*generateFunc )(int *, size_t),
                size_t size, char *experimentName) {
     static size_t runCounter = 1;
@@ -75,7 +87,7 @@ void checkTime(void (*sortFunc )(int *, size_t),
 
 // замер времени
     double time;
-    TIME_TEST({ sortFunc(innerBuffer, size); }, time)
+    TIME_TEST((sortFuncn).sort(innerBuffer, size), time);
 
     // результаты замера
     printf(" Status : ");
@@ -84,7 +96,8 @@ void checkTime(void (*sortFunc )(int *, size_t),
 
         // запись в файл
         char filename[256];
-        sprintf(filename, "./data/%s.csv", experimentName);
+        createFile(filename, sortFuncn, experimentName, "time");
+//        sprintf(filename, "./data/%s.csv", experimentName);
         FILE *f = fopen(filename, "a");
         if (f == NULL) {
             printf(" FileOpenError %s", filename);
@@ -206,7 +219,7 @@ void shellSort(int *a, size_t size) {
         }
 }
 
-void radixSort(int* a, const size_t size) {
+void radixSort(int* a, size_t size) {
     const unsigned char mask = UCHAR_MAX;
     const size_t step = sizeof(char) * 8;
     int* buf = (int*) malloc(size * sizeof(int));
@@ -237,53 +250,83 @@ void radixSort(int* a, const size_t size) {
     free(buf);
 }
 
+int cmp(const void *a, const void *b) {
+    return *(const int *) a - *(const int *) b;
+}
 
-//void timeExperiment() {
-//    // описание функций сортировки
-//    SortFunc sorts[] = {
-//            {bubbleSort, " bubbleSort "},
-//            {oddEvenSort, " oddEvenSort "},
-//            {shakerSort, " shakerSort "},
-//            {insertionSort, " insertionSort "},
-//    };
-//    const unsigned FUNCS_N = ARRAY_SIZE (sorts);
-//
-//    // описание функций генерации
-//    GeneratingFunc generatingFuncs[] = {
-//            // генерируется случайный массив
-//            {generateRandomArray,      " random "},
-//            // генерируется массив 0, 1, 2, ..., n - 1
-//            {generateOrderedArray,     " ordered "},
-//            // генерируется массив n - 1, n - 2, ..., 0
-//            {generateOrderedBackwards, " orderedBackwards "}
-//    };
-//
-//    const unsigned CASES_N = ARRAY_SIZE(generatingFuncs);
-//
-//    // запись статистики в файл
-//    for (size_t size = 10000; size <= 100000; size += 10000) {
-//        printf(" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n");
-//        printf(" Size : %d\n", size);
-//        for (int i = 0; i < FUNCS_N; i++) {
-//            for (int j = 0; j < CASES_N; j++) {
-//                // генерация имени файла
-//                static char filename[128];
-//                sprintf(filename, "%s_% s_time ",
-//                        sorts[i].name, generatingFuncs[j].name);
-//                checkTime(sorts[i].sort, generatingFuncs[j].generate, size, filename);
-//            }
-//        }
-//        printf("\n");
-//    }
-//}
+int cmpReverse(const void *a, const void *b) {
+    return *(const int *) b - *(const int *) a;
+}
+
+void generateOrderedArray(int *a, size_t size) {
+    srand(time(0));
+    for (size_t i = 0; i < size; i++) {
+        a[i] = 100000 - rand() % 100000;
+    }
+    qsort(a, size, sizeof(int), cmp);
+}
+
+void generateOrderedBackwards(int *a, size_t size) {
+    srand(time(0));
+    for (size_t i = 0; i < size; i++) {
+        a[i] = 100000 - rand() % 100000;
+    }
+    qsort(a, size, sizeof(int), cmpReverse);
+}
+
+void generateRandomArray(int *a, size_t size) {
+    srand(time(0));
+    for (size_t i = 0; i < size; i++) {
+        a[i] = 100000 - rand() % 100000;
+    }
+}
+
+
+void timeExperiment() {
+    // описание функций сортировки
+    SortFunc sorts[] = {
+            {bubbleSort, " bubbleSort "},
+            {oddEvenSort, " oddEvenSort "},
+            {shakerSort, " shakerSort "},
+            {selectionSort, " selectionSort "},
+            {insertionSort, " insertionSort "},
+            {radixSort, " radixSort "},
+            {shellSort, " shellSort "},
+            {combSort, " combSort "},
+    };
+    const unsigned FUNCS_N = ARRAY_SIZE (sorts);
+
+    // описание функций генерации
+    GeneratingFunc generatingFuncs[] = {
+            // генерируется случайный массив
+            {generateRandomArray,      " random "},
+            // генерируется массив 0, 1, 2, ..., n - 1
+            {generateOrderedArray,     " ordered "},
+            // генерируется массив n - 1, n - 2, ..., 0
+            {generateOrderedBackwards, " orderedBackwards "}
+    };
+
+    const unsigned CASES_N = ARRAY_SIZE(generatingFuncs);
+
+    // запись статистики в файл
+    for (size_t size = 10000; size <= 100000; size += 10000) {
+        printf(" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n");
+        printf(" Size : %d\n", size);
+        for (int i = 0; i < FUNCS_N; i++) {
+            for (int j = 0; j < CASES_N; j++) {
+                // генерация имени файла
+                static char filename[128];
+                sprintf(filename, "%s_% s_time ",
+                        sorts[i].name, generatingFuncs[j].name);
+                checkTime(sorts[i], generatingFuncs[j].generate, size, filename);
+            }
+        }
+        printf("\n");
+    }
+}
 
 int main() {
-    int a[10];
-    inputArray(a, 10);
-
-    radixSort(a, 10);
-
-    outputArray(a, 10);
+    timeExperiment();
 
     return 0;
 }
